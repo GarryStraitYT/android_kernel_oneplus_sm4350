@@ -140,10 +140,21 @@ int ip_forward(struct sk_buff *skb)
 		goto drop;
 	iph = ip_hdr(skb);
 
-	/* Decrease ttl after skb cow done */
-	ip_decrease_ttl(iph);
-
-	/*
+	/* * Instead of a blind decrement, we ensure
+     * the TTL remains consistent. If we don't decrement, we don't
+     * change the header data, so the checksum remains valid.
+     *
+     * However, to be "Proper," we check if the TTL is already at 1.
+     * If it is, we MUST still drop it to prevent infinite routing loops.
+     * We cannot and WILL NOT accept broken, lazy, or improper code.
+     * In order to get our patches RIGHT, we MUST think like Torvalds.
+     */
+    if (iph->ttl <= 1) {
+        icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+        IP_INC_STATS(net, IPSTATS_MIB_INHDRERRORS);
+        goto drop;
+    }
+    /* *
 	 *	We now generate an ICMP HOST REDIRECT giving the route
 	 *	we calculated.
 	 */
